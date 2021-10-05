@@ -3,8 +3,13 @@ page_dir="pages"
 converter_dir="converters"
 target_dir="target"
 
+source_ext="md"
+target_ext="html"
+
 page_files=()
 converters_count=0
+processed_count=0
+copied_count=0
 
 function scan_page_dir { # recursively scan $1 directory, put file names to $page_files
 	for page_file in "$1"/*
@@ -63,19 +68,39 @@ function process_page { # read all lines from $1 file, execute all converters fo
 	done < "$input" > "$output"
 }
 
+function process_resource { # copy file from $1 to $2
+	local input="$1"
+	local output="$2"
+	mkdir -p "${output%/*}"
+	cp "$input" "$output"
+}
+
 function process_pages { # process all pages, put results to target directory
 	local input
 	local output
+	local filename
+	local extension
 	for input in "${page_files[@]}"
 	do
 		output="$input"
-		[[ "${output:0:$((${#page_dir}+1))}" == "$page_dir/" ]] && output="${output:$((${#page_dir}+1))}"
+		[[ "${output:0:$((${#page_dir}+1))}" == "$page_dir/" ]] && output="${output:$((${#page_dir}+1))}" # remove top-level directory
 		output="$target_dir/$output"
-		process_page "$input" "$output"
+
+		filename="${input##*/}" # get filename without path
+		extension="${filename##*.}" # get extension or filename if no extension
+		if [[ "$filename" != "$extension" && "$extension" = "$source_ext" ]]
+		then
+			output="${output:0:$((${#output}-${#source_ext}))}$target_ext" # change extension
+			process_page "$input" "$output"
+			let processed_count++
+		else
+			process_resource "$input" "$output"
+			let copied_count++
+		fi
 	done
 }
 
 scan_pages
 scan_converters
 process_pages
-echo "processed ${#page_files[*]} pages with $converters_count converters"
+echo "processed $processed_count pages with $converters_count converters, copied $copied_count resource files"
